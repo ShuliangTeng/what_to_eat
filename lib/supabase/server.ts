@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseCookieOptions } from "@/lib/supabase/cookies";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
 export async function createServerSupabase() {
@@ -7,6 +8,7 @@ export async function createServerSupabase() {
   if (!env) throw new Error("还没有配置 Supabase。");
   const cookieStore = await cookies();
   return createServerClient(env.url, env.key, {
+    cookieOptions: supabaseCookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();

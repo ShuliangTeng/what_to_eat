@@ -35,12 +35,10 @@ npx tsx scripts/recommend-check.ts
 3. 填入项目 URL，以及 Publishable key。如果控制台仍显示 anon key，填到 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 即可。
 4. 不要把 `service_role` 或 secret key 放进 `.env.local`，更不要加上 `NEXT_PUBLIC_` 前缀。
 5. 打开 Supabase 的 SQL Editor，运行 `supabase/migrations/20261008190000_init.sql` 的全部内容。
-6. 在 Authentication → URL Configuration 里加入：
-   - Site URL：本地如果 `npm run dev` 使用 3001 端口，填 `http://localhost:3001`；默认端口则填 `http://localhost:3000`。上线后改成正式域名
-   - Redirect URLs：`http://localhost:3001/auth/callback`、`http://localhost:3000/auth/callback`，以及正式环境的 `https://你的域名/auth/callback`
+6. 在 Authentication → Sign In / Providers 里启用 Anonymous。不要把 service role 放进浏览器。
 7. 重新运行 `npm run dev`。
 
-登录使用邮箱魔法链接。打开邮件里的链接后，创建家庭或输入邀请码。一个家庭最多两位成员，两人看到同一份菜库、菜单、冰箱和购物清单。创建者把家庭页上的六位邀请码发给另一位；对方先登录，再加入。
+打开网站就会进入今天的菜单，不需要邮箱。每台设备有自己的会话，会话放在浏览器不能读取的 Cookie 里。要和另一个人共用，打开「另一台设备」，生成一次性配对码，让对方在自己的手机上输入。配对码大约 10 分钟内有效，用过就作废。一个菜单最多两台设备。
 
 首次进入空的家庭时，应用会写入内置菜库，并生成当周建议。演示模式另外放了一点示例库存，方便直接看到「家里有什么」。正式家庭的冰箱一开始是空的。
 
@@ -63,8 +61,8 @@ git push -u origin main
 1. 把 GitHub 仓库导入 [Vercel](https://vercel.com/new)。
 2. Framework 选 Next.js，安装命令用 `npm install`。
 3. 在项目的 Environment Variables 里添加与 `.env.local` 相同的 `NEXT_PUBLIC_SUPABASE_URL` 和 publishable/anon key。不要添加 service role。
-4. 部署完成后，把 Vercel 域名加进 Supabase 的 Site URL 和 Redirect URLs。
-5. 打开线上地址，用邮箱登录，确认两位家人能进同一个家庭。
+4. 部署完成后打开线上地址，确认直接进入今天的菜单。
+5. 在「另一台设备」里生成配对码，用第二台手机加入，确认两边看到同一份菜单。
 
 这份说明没有替你创建项目或完成部署。没有你自己的 Supabase 和 Vercel 账号，就不能声称已经上线。
 

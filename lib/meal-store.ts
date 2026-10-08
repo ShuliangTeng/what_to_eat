@@ -1,7 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { cloneSeedDishes, createHousehold, joinHousehold, loadCloud, pushCloud, sendMagicLink, signOutCloud, type DirtyFlags } from "@/lib/cloud";
+import { acceptPairingCode, issuePairingCode, loadKitchen, saveKitchen } from "@/lib/cloud-actions";
+import type { DirtyFlags } from "@/lib/cloud";
+import { cloneSeedDishes } from "@/lib/seed";
 import { createDemoData } from "@/lib/demo-data";
 import { todayISO } from "@/lib/dates";
 import {
@@ -85,7 +87,7 @@ async function start() {
   }
 
   try {
-    const loaded = await loadCloud(today);
+    const loaded = await loadKitchen(today);
     if (loaded.kind === "signed-out") {
       emit({ status: "signed-out", mode: "cloud", data: null, error: null, email: null });
       return;
@@ -108,7 +110,7 @@ async function start() {
       if (dirty.dishes) dirty.dishes = true;
     }
     emit({ status: "ready", mode: "cloud", data, error: null, email: loaded.session.email });
-    if (dirty.dishes || dirty.meals || dirty.groceries) await pushCloud(data, dirty, null);
+    if (dirty.dishes || dirty.meals || dirty.groceries) await saveKitchen(data, dirty, null);
   } catch (error) {
     emit({ status: "offline", mode: "cloud", data: null, error: messageOf(error), email: null });
   }
@@ -146,7 +148,7 @@ function commit(recipe: (data: AppData) => AppData, dirty: DirtyFlags) {
   void (async () => {
     try {
       if (mode === "demo") localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      else await pushCloud(next, dirty, current);
+      else await saveKitchen(next, dirty, current);
     } catch (error) {
       emit({ ...snapshot, data: next, error: messageOf(error) });
     } finally {
@@ -186,17 +188,10 @@ export const mealActions = {
     emit({ status: "ready", mode: "demo", data, error: null, email: null });
   },
   clearError: () => emit({ ...snapshot, error: null }),
-  sendMagicLink,
-  createHousehold: async (name: string) => {
-    await createHousehold(name);
-    await reload();
-  },
-  joinHousehold: async (code: string) => {
-    await joinHousehold(code);
-    await reload();
-  },
-  signOut: async () => {
-    await signOutCloud();
+  refresh: () => reload(),
+  issuePairingCode,
+  acceptPairingCode: async (code: string, confirmSwitch: boolean) => {
+    await acceptPairingCode(code, confirmSwitch);
     await reload();
   },
 };

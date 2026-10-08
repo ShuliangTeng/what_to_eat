@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { startMealApp, useMealApp } from "@/lib/meal-store";
 import { cx } from "@/components/ui";
@@ -17,20 +17,13 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const snap = useMealApp();
   const pathname = usePathname();
-  const router = useRouter();
 
   useEffect(() => {
     startMealApp();
   }, []);
 
-  useEffect(() => {
-    if (snap.status === "signed-out" && pathname !== "/login") router.replace("/login");
-    if (snap.status === "needs-household" && pathname !== "/household" && pathname !== "/login") router.replace("/household");
-    if (snap.status === "ready" && pathname === "/login") router.replace("/");
-  }, [pathname, router, snap.status]);
-
   const showNav = snap.status === "ready";
-  const bare = snap.status !== "ready" && pathname !== "/household" && pathname !== "/login";
+  const showPage = snap.status === "ready" || snap.status === "loading";
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[220px_minmax(0,1fr)]">
@@ -47,9 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div>
         <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 pt-5 md:px-8">
           <Brand compact />
-          {snap.status === "ready" || snap.status === "needs-household" ? (
+          {snap.status === "ready" ? (
             <Link href="/household" className="text-sm text-muted">
-              家庭
+              另一台设备
             </Link>
           ) : null}
         </header>
@@ -71,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="mt-3 text-muted" role="alert">{snap.error ?? "请检查网络和 Supabase 配置。"}</p>
             </div>
           ) : null}
-          {snap.status === "loading" || !bare ? children : <p>正在打开页面…</p>}
+          {showPage ? children : null}
         </main>
       </div>
       {showNav ? (

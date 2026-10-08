@@ -1,6 +1,5 @@
-import { createSeedDishes } from "@/lib/catalog";
 import { mondayOf, todayISO, weekDates } from "@/lib/dates";
-import { createBrowserSupabase } from "@/lib/supabase/client";
+import { createServerSupabase } from "@/lib/supabase/server";
 import type {
   AppData,
   Dish,
@@ -122,7 +121,35 @@ export function explainSupabaseError(error: { message?: string } | null): string
   if (message.includes("does not exist")) return "数据库表还没建好。请先在 Supabase 的 SQL Editor 里运行项目中的迁移文件。";
   if (message.toLowerCase().includes("jwt") || message.toLowerCase().includes("invalid claim")) return "登录过期了，请重新登录。";
   if (message.toLowerCase().includes("fetch")) return "网络连不上 Supabase。";
+  if (/anonymous/i.test(message)) return "云端会话还没打开。请在 Supabase 的 Authentication、Sign In / Providers 里启用 Anonymous。";
   return "没有保存成功，请稍后再试。";
+}
+
+async function db() {
+  return createServerSupabase();
+}
+
+async function ensureDevice(supabase: Awaited<ReturnType<typeof db>>) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const missing = Boolean(userError && /session missing/i.test(userError.message));
+  if (userError && !missing) throwIfError(userError);
+  let user = userData.user;
+  if (!user) {
+    const signed = await supabase.auth.signInAnonymously();
+    if (signed.error) throw new Error(explainSupabaseError(signed.error));
+    user = signed.data.user;
+  }
+  if (!user) throw new Error("这台设备还没有连上。");
+  const { data: membership, error: memberError } = await supabase
+    .from("household_members")
+    .select("household_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  throwIfError(memberError);
+  if (!membership?.household_id) {
+    const { error } = await supabase.rpc("create_household", { household_name: "我们的小厨房" });
+    throwIfError(error);
+  }
 }
 
 function throwIfError(error: { message?: string } | null) {
@@ -156,16 +183,9 @@ function readStatus(value: string): MealStatus {
   return "suggested";
 }
 
-export function cloneSeedDishes(): Dish[] {
-  return createSeedDishes().map((dish) => ({
-    ...dish,
-    id: crypto.randomUUID(),
-    ingredients: dish.ingredients.map((ingredient) => ({ ...ingredient, id: crypto.randomUUID() })),
-  }));
-}
-
 export async function loadCloud(today = todayISO()): Promise<LoadResult> {
-  const supabase = createBrowserSupabase();
+  const supabase = await db();
+  await ensureDevice(supabase);
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError && /session missing/i.test(userError.message)) return { kind: "signed-out" };
   throwIfError(userError);
@@ -186,7 +206,7 @@ export async function loadCloud(today = todayISO()): Promise<LoadResult> {
   const weekEnd = weekDates(monday)[6];
 
   const [household, settings, members, dishes, ingredients, inventory, meals, mealDishes, groceries, cooked] = await Promise.all([
-    supabase.from("households").select("id, name, invite_code").eq("id", householdId).single(),
+    supabase.from("households").select("id, name").eq("id", householdId).single(),
     supabase.from("household_settings").select("prefer_fuzhou, explore_new").eq("household_id", householdId).maybeSingle(),
     supabase.from("household_members").select("id, role, display_name").eq("household_id", householdId),
     supabase.from("dishes").select("id, name, tags, category, method, effort, familiarity, priority, status, usage, is_fuzhou, meal_role, preference_score").eq("household_id", householdId),
@@ -275,7 +295,7 @@ export async function loadCloud(today = todayISO()): Promise<LoadResult> {
     household: {
       id: household.data.id,
       name: household.data.name,
-      inviteCode: household.data.invite_code,
+      inviteCode: "",
     },
     members: ((members.data ?? []) as MemberRow[]).map((member) => ({
       id: member.id,
@@ -335,11 +355,11 @@ function preferenceEvents(before: Dish[], after: Dish[]) {
 }
 
 async function removeMissing(table: "dishes" | "dish_ingredients" | "inventory_items" | "grocery_items" | "planned_meal_dishes", householdId: string, keep: string[], column = "id") {
-  const supabase = createBrowserSupabase();
+  const supabase = await db();
   const { data, error } = await supabase.from(table).select(column).eq("household_id", householdId);
   throwIfError(error);
   const keepSet = new Set(keep);
-  const stale = ((data ?? []) as Record<string, string>[]).flatMap((row) => {
+  const stale = ((data ?? []) as unknown as Record<string, string>[]).flatMap((row) => {
     const value = row[column];
     return value && !keepSet.has(value) ? [value] : [];
   });
@@ -349,7 +369,7 @@ async function removeMissing(table: "dishes" | "dish_ingredients" | "inventory_i
 }
 
 export async function pushCloud(data: AppData, dirty: DirtyFlags, previous: AppData | null) {
-  const supabase = createBrowserSupabase();
+  const supabase = await db();
   const householdId = data.household.id;
   const { data: userData, error: userError } = await supabase.auth.getUser();
   throwIfError(userError);
@@ -486,29 +506,19 @@ export async function pushCloud(data: AppData, dirty: DirtyFlags, previous: AppD
   }
 }
 
-export async function createHousehold(name: string) {
-  const supabase = createBrowserSupabase();
-  const { error } = await supabase.rpc("create_household", { household_name: name.trim() || "我们的小厨房" });
+export async function createPairingCode() {
+  const supabase = await db();
+  const { data, error } = await supabase.rpc("create_pairing_code");
   throwIfError(error);
+  if (typeof data !== "string" || data.length !== 8) throw new Error("配对码没有生成成功。");
+  return data;
 }
 
-export async function joinHousehold(code: string) {
-  const supabase = createBrowserSupabase();
-  const { error } = await supabase.rpc("join_household", { invite_code: code.trim() });
-  throwIfError(error);
-}
-
-export async function sendMagicLink(email: string) {
-  const supabase = createBrowserSupabase();
-  const { error } = await supabase.auth.signInWithOtp({
-    email: email.trim(),
-    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+export async function redeemPairingCode(code: string, confirmSwitch: boolean) {
+  const supabase = await db();
+  const { error } = await supabase.rpc("redeem_pairing_code", {
+    raw_code: code,
+    confirm_switch: confirmSwitch,
   });
-  throwIfError(error);
-}
-
-export async function signOutCloud() {
-  const supabase = createBrowserSupabase();
-  const { error } = await supabase.auth.signOut();
   throwIfError(error);
 }
