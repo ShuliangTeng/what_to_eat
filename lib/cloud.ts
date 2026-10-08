@@ -23,7 +23,7 @@ export interface CloudSession {
   userId: string;
 }
 
-type LoadResult =
+export type LoadResult =
   | { kind: "signed-out" }
   | { kind: "needs-household"; session: CloudSession }
   | { kind: "ready"; session: CloudSession; data: AppData };

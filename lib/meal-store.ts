@@ -88,6 +88,10 @@ async function start() {
 
   try {
     const loaded = await loadKitchen(today);
+    if (loaded.kind === "error") {
+      emit({ status: "offline", mode: "cloud", data: null, error: loaded.message, email: null });
+      return;
+    }
     if (loaded.kind === "signed-out") {
       emit({ status: "signed-out", mode: "cloud", data: null, error: null, email: null });
       return;
@@ -148,7 +152,10 @@ function commit(recipe: (data: AppData) => AppData, dirty: DirtyFlags) {
   void (async () => {
     try {
       if (mode === "demo") localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      else await saveKitchen(next, dirty, current);
+      else {
+        const saved = await saveKitchen(next, dirty, current);
+        if (!saved.ok) throw new Error(saved.message);
+      }
     } catch (error) {
       emit({ ...snapshot, data: next, error: messageOf(error) });
     } finally {
@@ -189,9 +196,14 @@ export const mealActions = {
   },
   clearError: () => emit({ ...snapshot, error: null }),
   refresh: () => reload(),
-  issuePairingCode,
+  issuePairingCode: async () => {
+    const issued = await issuePairingCode();
+    if (!issued.ok) throw new Error(issued.message);
+    return issued.code;
+  },
   acceptPairingCode: async (code: string, confirmSwitch: boolean) => {
-    await acceptPairingCode(code, confirmSwitch);
+    const accepted = await acceptPairingCode(code, confirmSwitch);
+    if (!accepted.ok) throw new Error(accepted.message);
     await reload();
   },
 };
