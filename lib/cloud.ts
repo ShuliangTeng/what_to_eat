@@ -167,6 +167,7 @@ export function cloneSeedDishes(): Dish[] {
 export async function loadCloud(today = todayISO()): Promise<LoadResult> {
   const supabase = createBrowserSupabase();
   const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError && /session missing/i.test(userError.message)) return { kind: "signed-out" };
   throwIfError(userError);
   const user = userData.user;
   if (!user) return { kind: "signed-out" };
