@@ -516,9 +516,10 @@ export async function createPairingCode() {
 
 export async function redeemPairingCode(code: string, confirmSwitch: boolean) {
   const supabase = await db();
-  const { error } = await supabase.rpc("redeem_pairing_code", {
+  const { data, error } = await supabase.rpc("redeem_pairing_code", {
     raw_code: code,
     confirm_switch: confirmSwitch,
   });
   throwIfError(error);
+  if (data !== "ok") throw new Error(typeof data === "string" && data ? data : "没有加入。");
 }
